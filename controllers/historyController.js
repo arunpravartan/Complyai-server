@@ -10,7 +10,9 @@ exports.addHistory = async (req, res) => {
     const saveData = {
         user_id: payload.user_id,
         file_name: payload.fileName,
-        audit_data: payload.responceData
+        audit_data: payload.responceData,
+        type: payload.type,
+        audited_file_name: payload.audited_file_name
     }
     const result = await History.create(saveData);
     if(!result) {
@@ -30,3 +32,27 @@ exports.getHistory = async (req, res) => {
     }   
     res.json({ success: true, data: result });
 };
+
+exports.deleteSingleFile = async (req, res) => {
+    const payload = req.body;
+    if(!payload && !payload?.id) {
+        return res.json({ success: false, message: 'file id missing' });
+    }
+    const result = await History.deleteOne({ _id: payload?.id});
+    if(!result) {
+        return res.json({ success: false, message: 'User not found' });
+    }   
+    res.json({ success: true, data: result });
+}
+
+exports.downloadFile = async (req, res) => {
+    const payload = req.body;
+    if(!payload && !payload?.id) {
+        return res.json({ success: false, message: 'file id missing' });
+    }
+    const result = await History.deleteOne({ _id: payload?.id});
+    if(!result) {
+        return res.json({ success: false, message: 'User not found' });
+    }   
+    res.json({ success: true, data: result });
+}

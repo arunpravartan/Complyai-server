@@ -7,7 +7,9 @@ const history = new Schema({
     user_id: { type: ObjectId },
     date: { type: Date, default: Date.now },
     file_name: { type: String },
-    audit_data: { type: Mixed }
+    audit_data: { type: Mixed },
+    type : { type: String },
+    audited_file_name : { type: String }
 });
 
 const History = mongoose.model('History', history);
