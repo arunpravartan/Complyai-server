@@ -3,6 +3,14 @@ const { History, ObjectId } = require('../models/history');
 const path = require("path");
 const fs = require("fs");
 const axios = require("axios");
+
+const fsPromisses = require("fs").promises;
+const { promisify } = require('util');
+
+const folderPath = '/Users/arunkumar/Documents/complyai/complyai-docvalidation/uploads';
+// Use promisified fs.readdir to list files in the directory
+const readdir = promisify(fs.readdir);
+
 // ================= Start login route and it's function ======================== //
 exports.addHistory = async (req, res) => {
     const payload = req.body;
@@ -36,79 +44,50 @@ exports.getHistory = async (req, res) => {
 };
 
 exports.deleteSingleFile = async (req, res) => {
-    const payload = req.body;
-    if(!payload && !payload?.id) {
-        return res.json({ success: false, message: 'file id missing' });
+    let { id, fileName } = req.body;
+    if (!id || !fileName) {
+        return res.json({ success: false, message: 'File ID or file name missing' });
     }
-    const result = await History.deleteOne({ _id: payload?.id});
-    if(!result) {
-        return res.json({ success: false, message: 'User not found' });
-    }   
-    res.json({ success: true, data: result });
-}
+    fileName = fileName + ".docx.audited";
+    const filePath = path.join(folderPath, fileName); 
+    try {
+        await fsPromisses.access(filePath); 
+        await fsPromisses.unlink(filePath);
+        console.log('File deleted successfully');
+        const result = await History.deleteOne({ _id: id });
+
+        if (!result.deletedCount) {
+            return res.json({ success: false, message: 'File not found in database' });
+        }
+        return res.json({ success: true, message: 'File and database entry deleted successfully' });
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return res.json({ success: false, message: 'File not found' });
+        } else {
+            console.error('Error deleting the file:', err);
+            return res.json({ success: false, message: 'Error deleting file', error: err });
+        }
+    }
+};
 
 exports.downloadFile = async (req, res) => {
+    let { fileName } = req.query; 
     try {
-        const uploadURL = "https://complyai.pravartan.com/docvalidation/uploads/";
-
-        // Fetch file list from the remote server (this works only if the server exposes a list endpoint)
-        const response = await axios.get(uploadURL);
-
-        if (!response.data) {
-            return res.status(404).json({ success: false, message: "No files found" });
+        const files = await readdir(folderPath);
+        const fileWithAuditedExtension = files.find(file => file.includes(fileName) && file.endsWith('.docx.audited'));
+        if (!fileWithAuditedExtension) {
+            return res.status(404).json({ success: false, message: "File not found" });
         }
-
-        // Process and return the file list (assuming response is an array of file names)
-        const fileList = response.data
-            .filter(file => file.endsWith(".docs.audited"))  // Only .docs.audited files
-            .map(file => ({
-                originalFile: file,
-                fileName: file.replace(".audited", ""),  // Remove .audited
-                fileUrl: `${uploadURL}${file.replace(".audited", "")}` // Correct file URL
-            }));
-
-        res.json({ success: true, files: fileList });
+        const originalFilePath = path.join(folderPath, fileWithAuditedExtension);
+        if (!fs.existsSync(originalFilePath)) {
+            return res.status(404).json({ success: false, message: "Original file not found" });
+        }
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename=${originalFilePath}`);
+        const fileStream = fs.createReadStream(originalFilePath);
+        fileStream.pipe(res);
     } catch (error) {
-        console.error("Error fetching remote files:", error);
-        res.status(500).json({ success: false, message: "Server error" });
+        console.error('Error fetching file:', error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
     }
-}
-
-// exports.downloadFile = async (req, res) => {
-//     try {
-//         const { fileName } = req.query;
-
-//         if (!fileName) {
-//             return res.status(400).json({ success: false, message: "File name is required" });
-//         }
-
-//         const uploadsDir = path.join("", "uploads");
-//         const filePath = path.join(uploadsDir, `${fileName}.docs.audited`);
-
-//         // Check if the file exists
-//         if (!fs.existsSync(filePath)) {
-//             return res.status(404).json({ success: false, message: "File not found" });
-//         }
-
-//         // Create a new filename without the `.audited` extension
-//         const cleanFileName = `${fileName}.docs`;
-//         const newFilePath = path.join(uploadsDir, cleanFileName);
-
-//         // Rename the file (remove .audited)
-//         fs.renameSync(filePath, newFilePath);
-
-//         // Send the renamed file as a response
-//         res.download(newFilePath, cleanFileName, (err) => {
-//             if (err) {
-//                 console.error("File download error:", err);
-//                 res.status(500).json({ success: false, message: "Error downloading file" });
-//             } else {
-//                 console.log("File sent successfully:", cleanFileName);
-//             }
-//         });
-
-//     } catch (error) {
-//         console.error("Download error:", error);
-//         res.status(500).json({ success: false, message: "Server error" });
-//     }
-// };
+};
