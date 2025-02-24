@@ -1,6 +1,6 @@
 const { json } = require('express');
 const { History, ObjectId } = require('../models/history');
-const { RecordProcedureMaster} = require('../models/record_procedure_master');
+const { RecordProcedureMaster } = require('../models/record_procedure_master');
 const path = require("path");
 const fs = require("fs");
 const axios = require("axios");
@@ -15,7 +15,7 @@ const readdir = promisify(fs.readdir);
 // ================= Start login route and it's function ======================== //
 exports.addHistory = async (req, res) => {
     const payload = req.body;
-    if(!payload) {
+    if (!payload) {
         return res.json({ success: false, message: 'User not found' });
     }
     const saveData = {
@@ -23,25 +23,37 @@ exports.addHistory = async (req, res) => {
         file_name: payload.fileName,
         audit_data: payload.responceData,
         type: payload.type,
-        audited_file_name: payload.audited_file_name
+        audited_file_name: payload.audited_file_name,
+        formDetails: payload.formDetails
     }
     const result = await History.create(saveData);
-    if(!result) {
+    if (!result) {
         return res.json({ success: false, message: 'User not found' });
     }
     res.json({ success: true, data: result });
 };
 
 exports.getHistory = async (req, res) => {
-    const payload = req.body;
-    if(!payload) {
-        return res.json({ success: false, message: 'User not found' });
+    try {
+        const payload = req.body;
+
+        if (!payload?.user_id) {
+            return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+
+        const result = await History.find({ user_id: payload.user_id });
+
+        if (result.length === 0) {
+            return res.status(404).json({ success: false, message: 'No history found for this user' });
+        }
+        const recordHistory = result.filter(history => history.type === "record");
+        const procedureHistory = result.filter(history => history.type === "procedure");
+
+        res.json({ success: true, recordHistory, procedureHistory });
+    } catch (error) {
+        console.error("Error fetching history:", error);
+        res.status(500).json({ success: false, message: 'Internal Server Error' });
     }
-    const result = await History.find({ user_id: payload.user_id });
-    if(!result) {
-        return res.json({ success: false, message: 'User not found' });
-    }   
-    res.json({ success: true, data: result });
 };
 
 exports.deleteSingleFile = async (req, res) => {
@@ -50,9 +62,9 @@ exports.deleteSingleFile = async (req, res) => {
         return res.json({ success: false, message: 'File ID or file name missing' });
     }
     fileName = fileName + ".docx.audited";
-    const filePath = path.join(folderPath, fileName); 
+    const filePath = path.join(folderPath, fileName);
     try {
-        await fsPromisses.access(filePath); 
+        await fsPromisses.access(filePath);
         await fsPromisses.unlink(filePath);
         console.log('File deleted successfully');
         const result = await History.deleteOne({ _id: id });
@@ -72,7 +84,7 @@ exports.deleteSingleFile = async (req, res) => {
 };
 
 exports.downloadFile = async (req, res) => {
-    let { fileName } = req.query; 
+    let { fileName } = req.query;
     try {
         const files = await readdir(folderPath);
         const fileWithAuditedExtension = files.find(file => file.includes(fileName) && file.endsWith('.docx.audited'));

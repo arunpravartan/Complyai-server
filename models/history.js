@@ -9,7 +9,8 @@ const history = new Schema({
     file_name: { type: String },
     audit_data: { type: Mixed },
     type : { type: String },
-    audited_file_name : { type: String }
+    audited_file_name : { type: String },
+    formDetails : { type: Mixed }
 });
 
 const History = mongoose.model('History', history);
