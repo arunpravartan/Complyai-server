@@ -10,7 +10,8 @@ const FormData = require("form-data");
 const fsPromisses = require("fs").promises;
 const { promisify } = require('util');
 
-const folderPath = '/Users/arunkumar/Documents/complyai/complyai-docvalidation/uploads';
+// const folderPath = '/Users/arunkumar/Documents/complyai/complyai-docvalidation/uploads';
+const folderPath = '/root/docvalidation/uploads/';
 // Use promisified fs.readdir to list files in the directory
 const readdir = promisify(fs.readdir);
 

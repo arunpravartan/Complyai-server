@@ -8,7 +8,8 @@ const recordProcedureMaster = new Schema({
     sub_type: { type: String },
     date: { type: Date, default: Date.now },
     prompt: { type: Mixed },
-    sop_file_location: { type: Mixed }
+    sop_file_location: { type: Mixed },
+    sop_file_name : { type: String }
 });
 
 const RecordProcedureMaster = mongoose.model('RecordProcedureMaster', recordProcedureMaster);
