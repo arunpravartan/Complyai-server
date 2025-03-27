@@ -13,4 +13,5 @@ router.get('/get-procedure-master-data', serviceController.getProcedureMasterDat
 router.post('/send4audit', upload.single("file"), serviceController.sendFileForAudit);
 router.post('/upload-knowledge', upload.array('files'), serviceController.uploadKnowledge);
 router.post('/create-knowledge-db', serviceController.createKnowledgeDB);
+router.get('/reset-db', serviceController.resetVectorDatabase);
 module.exports = router;

@@ -93,6 +93,10 @@ exports.uploadKnowledge = async (req, res) => {
             },
         });
 
+        if (response.status > 206) {
+            return res.status(500).json({ success: false, message: "Failed to upload files" });
+        }
+
         // Respond with success message and data from the Flask API
         res.json({ success: true, message: "Files uploaded successfully", response: response.data });
     } catch (error) {
@@ -115,12 +119,32 @@ exports.createKnowledgeDB = async (req, res) => {
         // Send a POST request to the Flask API
         const response = await axios.post(apiEndpoint);
 
+        if (response.status > 206) {
+            return res.status(500).json({ success: false, message: "Failed to create the vector database" });
+        }
+
         // Handle the response from the Flask API
-        res.json({ success: true, message: "Vector database created/updated successfully", totalDocuments: response.data.total_documents, });
+        res.json({ success: true, message: "Vector database created/updated successfully", response: response.data, });
     } catch (error) {
         console.error("Error creating vector database:", error);
+        res.status(500).json({ success: false, message: "Failed to create the vector database", data: error });
+    }
+};
 
-        // Send an error response with detailed information
-        res.status(500).json({ success: false, message: "Failed to create the vector database", error: error.message, });
+exports.resetVectorDatabase = async (req, res) => {
+    try {
+        // Read all files in the upload directory
+        const apiEndpoint = "http://localhost:5000/reset-vector-database"; // Flask API endpoint
+
+        const response = await axios.get(apiEndpoint);
+
+        if (response.status > 206) {
+            return res.status(500).json({ success: false, message: "Failed to reset the database" });
+        }
+
+        res.json({ success: true, message: "Database reset successfully" });
+    } catch (error) {
+        console.error("Error resetting database:", error);
+        res.status(500).json({ success: false, message: "Failed to reset the database", data: error });
     }
 };
