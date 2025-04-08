@@ -71,7 +71,7 @@ exports.sendFileForAudit = async (req, res) => {
 exports.uploadKnowledge = async (req, res) => {
     try {
         const files = req.files;
-        const uploadApiUrl = "http://localhost:5000/upload-knowledge"; // Flask API endpoint
+        const uploadApiUrl = "http://127.0.0.1:5000/upload-knowledge"; // Flask API endpoint
 
         // Validate if files are present in the request
         if (!files || files.length === 0) {
@@ -112,7 +112,7 @@ exports.uploadKnowledge = async (req, res) => {
  */
 exports.createKnowledgeDB = async (req, res) => {
     try {
-        const apiEndpoint = "http://localhost:5000/create-vector-database"; // Flask API endpoint
+        const apiEndpoint = "http://127.0.0.1:5000/create-vector-database"; // Flask API endpoint
 
         console.log("Calling Flask API to create vector database");
 
@@ -134,7 +134,7 @@ exports.createKnowledgeDB = async (req, res) => {
 exports.resetVectorDatabase = async (req, res) => {
     try {
         // Read all files in the upload directory
-        const apiEndpoint = "http://localhost:5000/reset-vector-database"; // Flask API endpoint
+        const apiEndpoint = "http://127.0.0.1:5000/reset-vector-database"; // Flask API endpoint
 
         const response = await axios.get(apiEndpoint);
 
