@@ -9,5 +9,7 @@ router.get('/get-file-details', historyController.downloadFile);
 router.post('/add-chat-history', historyController.AddChatHistory);
 router.get('/get-chat-history', historyController.getChatHistory);
 router.get('/get-all-chat-history', historyController.getAllChatHistory);
+router.delete('/delete-chat-item', historyController.DeleteChatItem);
+router.delete('/clear-chat-history', historyController.ClearChatHistory);
 
 module.exports = router;

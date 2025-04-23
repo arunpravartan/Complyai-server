@@ -51,7 +51,7 @@ exports.getHistory = async (req, res) => {
         const recordHistory = result.filter(history => history.type === "record");
         const procedureHistory = result.filter(history => history.type === "procedure");
 
-        res.json({ success: true, recordHistory, procedureHistory, chatResult});
+        res.json({ success: true, recordHistory, procedureHistory, chatResult });
     } catch (error) {
         console.error("Error fetching history:", error);
         res.status(500).json({ success: false, message: 'Internal Server Error' });
@@ -107,6 +107,59 @@ exports.downloadFile = async (req, res) => {
     }
 };
 
+exports.ClearChatHistory = async (req, res) => {
+    try {
+        const { user_id } = req.body;
+
+        if (!user_id) {
+            return res.status(400).json({ success: false, message: 'User ID is required in request body.' });
+        }
+
+        const result = await ChatHistory.deleteMany({ user_id: user_id });
+
+        if (result.deletedCount === 0) {
+            console.log(`No chat history found to delete for user_id: ${user_id}`);
+            // Still considered a success, just nothing to delete
+        } else {
+            console.log(`Deleted ${result.deletedCount} chat history items for user_id: ${user_id}`);
+        }
+
+        res.json({ success: true, message: `Chat history cleared successfully. ${result.deletedCount} items removed.`, deletedCount: result.deletedCount });
+
+    } catch (error) {
+        console.error("Error clearing chat history:", error);
+        res.status(500).json({ success: false, message: "Failed to clear chat history.", error: error.message });
+    }
+};
+
+exports.DeleteChatItem = async (req, res) => {
+    try {
+        const { user_id, chat_item_id } = req.body;
+
+        if (!user_id || !chat_item_id) {
+            return res.status(400).json({ success: false, message: 'Missing user_id or chat_item_id in request body.' });
+        }
+
+        const result = await ChatHistory.findOneAndDelete({
+            _id: chat_item_id,
+            user_id: user_id
+        });
+
+        if (!result) {
+            return res.status(404).json({ success: false, message: 'Chat item not found or user unauthorized to delete.' });
+        }
+
+        res.json({ success: true, message: 'Chat item deleted successfully.', deleted_id: chat_item_id });
+
+    } catch (error) {
+        console.error("Error deleting chat item:", error);
+        if (error.name === 'CastError') {
+            return res.status(400).json({ success: false, message: 'Invalid chat item ID format.' });
+        }
+        res.status(500).json({ success: false, message: "Failed to delete chat item.", error: error.message });
+    }
+};
+
 exports.AddChatHistory = async (req, res) => {
     try {
         const payload = req.body;
@@ -130,7 +183,7 @@ exports.AddChatHistory = async (req, res) => {
     }
 }
 
-exports.getChatHistory = async (req, res) => {    
+exports.getChatHistory = async (req, res) => {
     try {
         const payload = req.query;
         if (!payload?.user_id) {
@@ -142,7 +195,7 @@ exports.getChatHistory = async (req, res) => {
         }
         res.json({ success: true, message: "Response history fetched successfully", response: result });
     } catch (error) {
-        console.error("Error fetching response history:", error);    
+        console.error("Error fetching response history:", error);
         res.json({ success: false, message: "Failed to fetch response history", data: error });
     }
 }
@@ -160,80 +213,79 @@ exports.getChatHistory = async (req, res) => {
 // }
 exports.getAllChatHistory = async (req, res) => {
     try {
-      const result = await ChatHistory.aggregate([
-        {
-          $group: {
-            _id: { $month: "$date" },
-            total: { $sum: 1 }
-          }
-        },
-        {
-          $project: {
-            month: "$_id",
-            total: 1,
-            _id: 0
-          }
-        }
-      ]);
-  
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const formatted = months.map((name, index) => {
-        const found = result.find(r => r.month === index + 1);
-        return { name, Query: found ? found.total : 0 };
-      });
+        const result = await ChatHistory.aggregate([
+            {
+                $group: {
+                    _id: { $month: "$date" },
+                    total: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    month: "$_id",
+                    total: 1,
+                    _id: 0
+                }
+            }
+        ]);
 
-      const totalRecords = await History.find({});
-      const totalKnowledge = await KnowledgeRecordHistory.countDocuments();
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const formatted = months.map((name, index) => {
+            const found = result.find(r => r.month === index + 1);
+            return { name, Query: found ? found.total : 0 };
+        });
 
-    const filteredRecords = totalRecords.filter(record => record.type === "record");
-    const filteredProcedures = totalRecords.filter(record => record.type === "procedure");
+        const totalRecords = await History.find({});
+        const totalKnowledge = await KnowledgeRecordHistory.countDocuments();
 
-      const stats = [
-        { label: "Total Queries", value: result[0].total, change: "+2.6%", icon: "mdi:comment-question-outline", color: "#e8f5e9" },
-        { label: "Total Records Validated", value: filteredRecords.length || 0, change: "-0.1%", icon: "mdi:check-decagram-outline", color: "#e8f0fe" },
-        { label: "Total Procedure Validated", value: filteredProcedures.length || 0, change: "+2.8%", icon: "mdi:clipboard-check-outline", color: "#f0f4c3" },
-        { label: "Total Documents in Knowledge DB", value: totalKnowledge, change: "+3.6%", icon: "mdi:file-document-multiple-outline", color: "#ede7f6" }
-      ];
+        const filteredRecords = totalRecords.filter(record => record.type === "record");
+        const filteredProcedures = totalRecords.filter(record => record.type === "procedure");
+
+        const stats = [
+            { label: "Total Queries", value: result[0].total, change: "+2.6%", icon: "mdi:comment-question-outline", color: "#e8f5e9" },
+            { label: "Total Records Validated", value: filteredRecords.length || 0, change: "-0.1%", icon: "mdi:check-decagram-outline", color: "#e8f0fe" },
+            { label: "Total Procedure Validated", value: filteredProcedures.length || 0, change: "+2.8%", icon: "mdi:clipboard-check-outline", color: "#f0f4c3" },
+            { label: "Total Documents in Knowledge DB", value: totalKnowledge, change: "+3.6%", icon: "mdi:file-document-multiple-outline", color: "#ede7f6" }
+        ];
 
 
-      const rawData = await History.aggregate([
-        {
-          $project: {
-            month: { $month: "$date" },
-            type: 1
-          }
-        },
-        {
-          $group: {
-            _id: { month: "$month", type: "$type" },
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-  
-      const resultMap = {};
-  
-      rawData.forEach(item => {
-        const monthIndex = item._id.month - 1;
-        const monthName = months[monthIndex];
-  
-        if (!resultMap[monthName]) {
-          resultMap[monthName] = { name: monthName, Record: 0, Procedure: 0 };
-        }
-  
-        if (item._id.type === "record") {
-          resultMap[monthName].Record = item.count;
-        } else if (item._id.type === "procedure") {
-          resultMap[monthName].Procedure = item.count;
-        }
-      });
-  
-      // Convert map to array and sort by original month index
-      const finalData = months.map(name => resultMap[name] || { name, Record: 0, Procedure: 0 });
-  
-      res.json({ success: true, response: formatted, stats : stats , lineKnowledgeData : finalData });
+        const rawData = await History.aggregate([
+            {
+                $project: {
+                    month: { $month: "$date" },
+                    type: 1
+                }
+            },
+            {
+                $group: {
+                    _id: { month: "$month", type: "$type" },
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        const resultMap = {};
+
+        rawData.forEach(item => {
+            const monthIndex = item._id.month - 1;
+            const monthName = months[monthIndex];
+
+            if (!resultMap[monthName]) {
+                resultMap[monthName] = { name: monthName, Record: 0, Procedure: 0 };
+            }
+
+            if (item._id.type === "record") {
+                resultMap[monthName].Record = item.count;
+            } else if (item._id.type === "procedure") {
+                resultMap[monthName].Procedure = item.count;
+            }
+        });
+
+        // Convert map to array and sort by original month index
+        const finalData = months.map(name => resultMap[name] || { name, Record: 0, Procedure: 0 });
+
+        res.json({ success: true, response: formatted, stats: stats, lineKnowledgeData: finalData });
     } catch (err) {
-      res.status(500).json({ success: false, message: "Aggregation error", error: err });
+        res.status(500).json({ success: false, message: "Aggregation error", error: err });
     }
-  };
-  
+};
