@@ -182,15 +182,56 @@ exports.getAllChatHistory = async (req, res) => {
         return { name, Query: found ? found.total : 0 };
       });
 
-      const totalRecords = await KnowledgeRecordHistory.countDocuments();
+      const totalRecords = await History.find({});
+      const totalKnowledge = await KnowledgeRecordHistory.countDocuments();
+
+    const filteredRecords = totalRecords.filter(record => record.type === "record");
+    const filteredProcedures = totalRecords.filter(record => record.type === "procedure");
+
       const stats = [
         { label: "Total Queries", value: result[0].total, change: "+2.6%", icon: "mdi:comment-question-outline", color: "#e8f5e9" },
-        { label: "Total Records Validated", value: totalRecords, change: "-0.1%", icon: "mdi:check-decagram-outline", color: "#e8f0fe" },
-        { label: "Total Procedure Validated", value: "1.72m", change: "+2.8%", icon: "mdi:clipboard-check-outline", color: "#f0f4c3" },
-        { label: "Total Documents in Knowledge DB", value: "234", change: "+3.6%", icon: "mdi:file-document-multiple-outline", color: "#ede7f6" }
+        { label: "Total Records Validated", value: filteredRecords.length || 0, change: "-0.1%", icon: "mdi:check-decagram-outline", color: "#e8f0fe" },
+        { label: "Total Procedure Validated", value: filteredProcedures.length || 0, change: "+2.8%", icon: "mdi:clipboard-check-outline", color: "#f0f4c3" },
+        { label: "Total Documents in Knowledge DB", value: totalKnowledge, change: "+3.6%", icon: "mdi:file-document-multiple-outline", color: "#ede7f6" }
       ];
 
-      res.json({ success: true, response: formatted, stats : stats });
+
+      const rawData = await History.aggregate([
+        {
+          $project: {
+            month: { $month: "$date" },
+            type: 1
+          }
+        },
+        {
+          $group: {
+            _id: { month: "$month", type: "$type" },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+  
+      const resultMap = {};
+  
+      rawData.forEach(item => {
+        const monthIndex = item._id.month - 1;
+        const monthName = months[monthIndex];
+  
+        if (!resultMap[monthName]) {
+          resultMap[monthName] = { name: monthName, Record: 0, Procedure: 0 };
+        }
+  
+        if (item._id.type === "record") {
+          resultMap[monthName].Record = item.count;
+        } else if (item._id.type === "procedure") {
+          resultMap[monthName].Procedure = item.count;
+        }
+      });
+  
+      // Convert map to array and sort by original month index
+      const finalData = months.map(name => resultMap[name] || { name, Record: 0, Procedure: 0 });
+  
+      res.json({ success: true, response: formatted, stats : stats , lineKnowledgeData : finalData });
     } catch (err) {
       res.status(500).json({ success: false, message: "Aggregation error", error: err });
     }
