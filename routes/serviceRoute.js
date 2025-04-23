@@ -14,4 +14,6 @@ router.post('/send4audit', upload.single("file"), serviceController.sendFileForA
 router.post('/upload-knowledge', upload.array('files'), serviceController.uploadKnowledge);
 router.post('/create-knowledge-db', serviceController.createKnowledgeDB);
 router.get('/reset-db', serviceController.resetVectorDatabase);
+router.get('/get-response-history', serviceController.fetchResponseHistory);
+router.post('/delete-knowledge-file', serviceController.deleteKnowledgeFile);
 module.exports = router;

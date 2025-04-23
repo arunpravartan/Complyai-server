@@ -10,9 +10,18 @@ const history = new Schema({
     audit_data: { type: Mixed },
     type : { type: String },
     audited_file_name : { type: String },
-    formDetails : { type: Mixed }
+    formDetails : { type: Mixed },
+    status: { type: String , default: "active" }
+});
+
+const chatHistory = new Schema({
+    user_id: { type: ObjectId },
+    date: { type: Date, default: Date.now },
+    question: { type: String },
+    answer: { type: Mixed },
+    status: { type: String , default: "active" }
 });
 
 const History = mongoose.model('History', history);
-
-module.exports = {History, ObjectId};
+const ChatHistory = mongoose.model('ChatHistory', chatHistory);
+module.exports = {History, ObjectId, ChatHistory};

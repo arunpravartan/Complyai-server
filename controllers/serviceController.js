@@ -1,5 +1,6 @@
 const { json } = require('express');
 const { RecordProcedureMaster} = require('../models/record_procedure_master');
+const { KnowledgeRecordHistory} = require('../models/knowledge_record_history');
 const path = require("path");
 const fs = require("fs");
 
@@ -86,7 +87,6 @@ exports.uploadKnowledge = async (req, res) => {
             // Append each file's buffer and original name to the form
             form.append("file", file.buffer, file.originalname);
         });
-
         const response = await axios.post(uploadApiUrl, form, {
             headers: {
                 ...form.getHeaders(),
@@ -96,9 +96,17 @@ exports.uploadKnowledge = async (req, res) => {
         if (response.status > 206) {
             return res.status(500).json({ success: false, message: "Failed to upload files" });
         }
-
+        const recordsToInsert = files.map((file) => ({
+            file_name: file.originalname,
+            file_type: file.mimetype,
+            file_location: `/uploads/${file.originalname}`, // adjust to your upload logic
+            user_id: req.body.user_id,
+            status: "Uploaded",
+            date: new Date()
+        }));
+        const savedRecords = await KnowledgeRecordHistory.insertMany(recordsToInsert);
         // Respond with success message and data from the Flask API
-        res.json({ success: true, message: "Files uploaded successfully", response: response.data });
+        res.json({ success: true, message: "Files uploaded successfully", response: response?.data || [] , recordsToInsert: savedRecords });
     } catch (error) {
         console.error("Error uploading knowledge:", error);
         res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
@@ -141,10 +149,41 @@ exports.resetVectorDatabase = async (req, res) => {
         if (response.status > 206) {
             return res.status(500).json({ success: false, message: "Failed to reset the database" });
         }
-
         res.json({ success: true, message: "Database reset successfully" });
     } catch (error) {
         console.error("Error resetting database:", error);
         res.status(500).json({ success: false, message: "Failed to reset the database", data: error });
     }
 };
+exports.fetchResponseHistory = async (req, res) => {
+    try {
+        if(!req.query.user_id) {
+            return res.json({ success: false, message: "User is missing in payload data" });
+        }
+        const result = await KnowledgeRecordHistory.find({ user_id: req.query.user_id });
+        if(!result) {
+            return res.json({ success: true, message: "no data found" });
+        }   
+        res.json({ success: true, message: "Response history fetched successfully", response: result });
+    } catch (error) {
+        console.error("Error fetching response history:", error);
+        res.status(500).json({ success: false, message: "Failed to fetch response history", data: error });
+    }
+};
+
+exports.deleteKnowledgeFile = async (req, res) => {
+    try {
+        const {id, user_id} = req.body;
+        if(!id || !user_id) {
+            return res.json({ success: false, message: "File name is missing in payload data" });
+        }
+        const result = await KnowledgeRecordHistory.deleteOne({ _id: id, user_id: user_id});
+        if(!result) {
+            return res.json({ success: true, message: "no data found" });
+        }   
+        res.json({ success: true, message: "File deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting file:", error);
+        res.status(500).json({ success: false, message: "Failed to delete file", data: error });
+    }
+}

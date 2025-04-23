@@ -1,6 +1,7 @@
 const { json } = require('express');
-const { History, ObjectId } = require('../models/history');
+const { History, ObjectId, ChatHistory } = require('../models/history');
 const { RecordProcedureMaster } = require('../models/record_procedure_master');
+const { KnowledgeRecordHistory } = require('../models/knowledge_record_history');
 const path = require("path");
 const fs = require("fs");
 const axios = require("axios");
@@ -42,6 +43,7 @@ exports.getHistory = async (req, res) => {
         }
 
         const result = await History.find({ user_id: payload.user_id });
+        const chatResult = await ChatHistory.find();
 
         if (result.length === 0) {
             return res.status(404).json({ success: false, message: 'No history found for this user' });
@@ -49,7 +51,7 @@ exports.getHistory = async (req, res) => {
         const recordHistory = result.filter(history => history.type === "record");
         const procedureHistory = result.filter(history => history.type === "procedure");
 
-        res.json({ success: true, recordHistory, procedureHistory });
+        res.json({ success: true, recordHistory, procedureHistory, chatResult});
     } catch (error) {
         console.error("Error fetching history:", error);
         res.status(500).json({ success: false, message: 'Internal Server Error' });
@@ -104,3 +106,93 @@ exports.downloadFile = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+
+exports.AddChatHistory = async (req, res) => {
+    try {
+        const payload = req.body;
+        if (!payload) {
+            return res.json({ success: false, message: 'User not found' });
+        }
+        const saveData = {
+            user_id: payload.user_id,
+            question: payload.question,
+            answer: payload.answer,
+            status: "active"
+        };
+        const result = await ChatHistory.create(saveData);
+        if (!result) {
+            return res.json({ success: false, message: 'User not found' });
+        }
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error("Error fetching response history:", error);
+        res.json({ success: false, message: "Failed to fetch response history", data: error });
+    }
+}
+
+exports.getChatHistory = async (req, res) => {    
+    try {
+        const payload = req.query;
+        if (!payload?.user_id) {
+            return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+        const result = await ChatHistory.find({ user_id: payload.user_id });
+        if (!result) {
+            return res.json({ success: true, message: "no data found" });
+        }
+        res.json({ success: true, message: "Response history fetched successfully", response: result });
+    } catch (error) {
+        console.error("Error fetching response history:", error);    
+        res.json({ success: false, message: "Failed to fetch response history", data: error });
+    }
+}
+// exports.getAllChatHistory = async (req, res) => {
+//     try {
+//         const result = await ChatHistory.find();
+//         if (!result) {
+//             return res.json({ success: true, message: "no data found" });
+//         }
+//         res.json({ success: true, message: "Response history fetched successfully", response: result });
+//     } catch (error) {
+//         console.error("Error fetching response history:", error);
+//         res.json({ success: false, message: "Failed to fetch response history", data: error });
+//     }
+// }
+exports.getAllChatHistory = async (req, res) => {
+    try {
+      const result = await ChatHistory.aggregate([
+        {
+          $group: {
+            _id: { $month: "$date" },
+            total: { $sum: 1 }
+          }
+        },
+        {
+          $project: {
+            month: "$_id",
+            total: 1,
+            _id: 0
+          }
+        }
+      ]);
+  
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const formatted = months.map((name, index) => {
+        const found = result.find(r => r.month === index + 1);
+        return { name, Query: found ? found.total : 0 };
+      });
+
+      const totalRecords = await KnowledgeRecordHistory.countDocuments();
+      const stats = [
+        { label: "Total Queries", value: result[0].total, change: "+2.6%", icon: "mdi:comment-question-outline", color: "#e8f5e9" },
+        { label: "Total Records Validated", value: totalRecords, change: "-0.1%", icon: "mdi:check-decagram-outline", color: "#e8f0fe" },
+        { label: "Total Procedure Validated", value: "1.72m", change: "+2.8%", icon: "mdi:clipboard-check-outline", color: "#f0f4c3" },
+        { label: "Total Documents in Knowledge DB", value: "234", change: "+3.6%", icon: "mdi:file-document-multiple-outline", color: "#ede7f6" }
+      ];
+
+      res.json({ success: true, response: formatted, stats : stats });
+    } catch (err) {
+      res.status(500).json({ success: false, message: "Aggregation error", error: err });
+    }
+  };
+  
