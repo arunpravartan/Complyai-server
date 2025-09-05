@@ -149,6 +149,9 @@ exports.resetVectorDatabase = async (req, res) => {
         if (response.status > 206) {
             return res.status(500).json({ success: false, message: "Failed to reset the database" });
         }
+
+        await KnowledgeRecordHistory.deleteMany({});
+
         res.json({ success: true, message: "Database reset successfully" });
     } catch (error) {
         console.error("Error resetting database:", error);

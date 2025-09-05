@@ -7,7 +7,7 @@ const multer = require("multer");
 const axios = require("axios");
 const FormData = require("form-data");
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 router.get('/get-procedure-master-data', serviceController.getProcedureMasterData);
 router.post('/send4audit', upload.single("file"), serviceController.sendFileForAudit);

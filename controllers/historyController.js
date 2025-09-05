@@ -140,10 +140,10 @@ exports.DeleteChatItem = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Missing user_id or chat_item_id in request body.' });
         }
 
-        const result = await ChatHistory.findOneAndDelete({
+        const result = await ChatHistory.findOneAndUpdate({
             _id: chat_item_id,
             user_id: user_id
-        });
+        }, { $set: { status: "inactive" } });
 
         if (!result) {
             return res.status(404).json({ success: false, message: 'Chat item not found or user unauthorized to delete.' });
@@ -189,7 +189,7 @@ exports.getChatHistory = async (req, res) => {
         if (!payload?.user_id) {
             return res.status(400).json({ success: false, message: 'User ID is required' });
         }
-        const result = await ChatHistory.find({ user_id: payload.user_id });
+        const result = await ChatHistory.find({ user_id: payload.user_id, status: "active" });
         if (!result) {
             return res.json({ success: true, message: "no data found" });
         }
@@ -211,80 +211,140 @@ exports.getChatHistory = async (req, res) => {
 //         res.json({ success: false, message: "Failed to fetch response history", data: error });
 //     }
 // }
+
 exports.getAllChatHistory = async (req, res) => {
     try {
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+
+        const monthsToInclude = [lastMonth, currentMonth];
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
         const result = await ChatHistory.aggregate([
             {
-                $group: {
-                    _id: { $month: "$date" },
-                    total: { $sum: 1 }
+                $match: {
+                    $expr: {
+                        $in: [{ $month: "$date" }, monthsToInclude]
+                    }
                 }
             },
-            {
-                $project: {
-                    month: "$_id",
-                    total: 1,
-                    _id: 0
-                }
-            }
-        ]);
-
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const formatted = months.map((name, index) => {
-            const found = result.find(r => r.month === index + 1);
-            return { name, Query: found ? found.total : 0 };
-        });
-
-        const totalRecords = await History.find({});
-        const totalKnowledge = await KnowledgeRecordHistory.countDocuments();
-
-        const filteredRecords = totalRecords.filter(record => record.type === "record");
-        const filteredProcedures = totalRecords.filter(record => record.type === "procedure");
-
-        const stats = [
-            { label: "Total Queries", value: result[0].total, change: "+2.6%", icon: "mdi:comment-question-outline", color: "#e8f5e9" },
-            { label: "Total Records Validated", value: filteredRecords.length || 0, change: "-0.1%", icon: "mdi:check-decagram-outline", color: "#e8f0fe" },
-            { label: "Total Procedure Validated", value: filteredProcedures.length || 0, change: "+2.8%", icon: "mdi:clipboard-check-outline", color: "#f0f4c3" },
-            { label: "Total Documents in Knowledge DB", value: totalKnowledge, change: "+3.6%", icon: "mdi:file-document-multiple-outline", color: "#ede7f6" }
-        ];
-
-
-        const rawData = await History.aggregate([
             {
                 $project: {
                     month: { $month: "$date" },
-                    type: 1
+                    week: {
+                        $switch: {
+                            branches: [
+                                { case: { $lte: [{ $dayOfMonth: "$date" }, 7] }, then: 1 },
+                                { case: { $lte: [{ $dayOfMonth: "$date" }, 14] }, then: 2 },
+                                { case: { $lte: [{ $dayOfMonth: "$date" }, 21] }, then: 3 },
+                                { case: { $lte: [{ $dayOfMonth: "$date" }, 31] }, then: 4 }
+                            ],
+                            default: 0
+                        }
+                    }
                 }
             },
             {
                 $group: {
-                    _id: { month: "$month", type: "$type" },
+                    _id: { month: "$month", week: "$week" },
                     count: { $sum: 1 }
                 }
             }
         ]);
 
-        const resultMap = {};
+        // Convert result into { '4-1': 5, '4-2': 8, ... }
+        const grouped = {};
+        for (const r of result) {
+            const key = `${r._id.month}-${r._id.week}`;
+            grouped[key] = r.count;
+        }
 
-        rawData.forEach(item => {
-            const monthIndex = item._id.month - 1;
-            const monthName = months[monthIndex];
-
-            if (!resultMap[monthName]) {
-                resultMap[monthName] = { name: monthName, Record: 0, Procedure: 0 };
-            }
-
-            if (item._id.type === "record") {
-                resultMap[monthName].Record = item.count;
-            } else if (item._id.type === "procedure") {
-                resultMap[monthName].Procedure = item.count;
+        // Build final formatted array
+        const formatted = [];
+        monthsToInclude.forEach(month => {
+            for (let w = 1; w <= 4; w++) {
+                const label = `${monthNames[month - 1]} W ${w}`;
+                const key = `${month}-${w}`;
+                formatted.push({
+                    name: label,
+                    Query: grouped[key] || 0
+                });
             }
         });
 
-        // Convert map to array and sort by original month index
-        const finalData = months.map(name => resultMap[name] || { name, Record: 0, Procedure: 0 });
 
-        res.json({ success: true, response: formatted, stats: stats, lineKnowledgeData: finalData });
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+        const totalRecords = await History.find({});
+        const totalKnowledge = await KnowledgeRecordHistory.countDocuments();
+        const totalQueries = await ChatHistory.countDocuments();
+        const filteredRecords = totalRecords.filter(record => record.type === "record");
+        const filteredProcedures = totalRecords.filter(record => record.type === "procedure");
+
+        const stats = [
+            { label: "Total Queries", value: totalQueries, change: "+2.6%", icon: "mdi:comment-question-outline", color: "#e8f5e9" },
+            { label: "Total Records Validated", value: filteredRecords.length || 0, change: "-0.1%", icon: "mdi:check-decagram-outline", color: "#e8f0fe" },
+            { label: "Total Procedures Validated", value: filteredProcedures.length || 0, change: "+2.8%", icon: "mdi:clipboard-check-outline", color: "#f0f4c3" },
+            { label: "Total Documents in Knowledge DB", value: totalKnowledge + 4, change: "+3.6%", icon: "mdi:file-document-multiple-outline", color: "#ede7f6" }
+        ];
+
+        const currentMonth1 = now.getMonth(); // e.g., April = 3 (0-based)
+const currentYear = now.getFullYear();
+
+const startOfCurrentMonth = new Date(currentYear, currentMonth1, 1);
+const startOfPreviousMonth = new Date(currentYear, currentMonth1 - 1, 1);
+const endOfCurrentMonth = new Date(currentYear, currentMonth1 + 1, 0, 23, 59, 59, 999);
+
+// monthsToInclude must match 0-based month indexes: [2, 3] for March, April
+const monthsToInclude1 = [startOfPreviousMonth.getMonth(), startOfCurrentMonth.getMonth()];
+
+const data = await History.find({
+  date: {
+    $gte: startOfPreviousMonth,
+    $lte: endOfCurrentMonth
+  }
+});
+const resultMap = {};
+data.forEach(item => {
+    const d = new Date(item.date);
+    const month = d.getMonth();
+    const year = d.getFullYear();
+  
+    // Only include current and last month
+    if (!monthsToInclude1.includes(month)) return;
+  
+    const day = d.getDate();
+    const type = item.type || 'unknown';
+  
+    let week = 0;
+    if (day <= 7) week = 1;
+    else if (day <= 14) week = 2;
+    else if (day <= 21) week = 3;
+    else week = 4;
+  
+    const label = `${months[month]} W${week}`;
+  
+    if (!resultMap[label]) {
+      resultMap[label] = { name: label, record: 0, procedure: 0 };
+    }
+  
+    if (type === "record") resultMap[label].record++;
+    else if (type === "procedure") resultMap[label].procedure++;
+    else resultMap[label].unknown = (resultMap[label].unknown || 0) + 1;
+  });
+  
+  // Ensure output includes all 8 week slots (4 from each month)
+  const finalData = [];
+  monthsToInclude1.forEach(month => {
+    for (let week = 1; week <= 4; week++) {
+      const label = `${months[month]} W${week}`;
+      finalData.push(resultMap[label] || { name: label, record: 0, procedure: 0 });
+    }
+  });
+  
+    res.json({ success: true, response: formatted, stats: stats, lineKnowledgeData: finalData });
     } catch (err) {
         res.status(500).json({ success: false, message: "Aggregation error", error: err });
     }
